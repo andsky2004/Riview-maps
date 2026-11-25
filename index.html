@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Google Review Card</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background: #f8fafc; color: #1e293b; }
+    .google-bar { background: linear-gradient(90deg, #4285F4 0%, #EA4335 33%, #FBBC05 66%, #34A853 100%); }
+    .star-btn { transition: transform 0.15s ease, color 0.15s ease; }
+    .star-btn:hover { transform: scale(1.15); }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-5">
+
+  <!-- VIEW 1: AKTIVASI KARTU (1 KALI) -->
+  <div id="view-activate" class="hidden w-full max-w-sm bg-white p-7 rounded-2xl shadow-sm border border-gray-200">
+    <h1 class="text-2xl font-bold text-gray-900">Aktivasi Kartu</h1>
+    <p class="text-sm text-gray-500 mt-1.5 mb-5">Kode kartu: <strong id="act-code-label" class="text-gray-900">AYBRZY</strong>. Isi data di bawah untuk mengaktifkan.</p>
+    <form onsubmit="handleActivate(event)" class="space-y-4">
+      <div class="relative">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Nama Bisnis / Toko</label>
+        <input type="text" id="act-name" required autocomplete="off" oninput="searchPlaces(this.value, 'act')" placeholder="Contoh: Install Ulang Laptop Palangkaraya" class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600">
+        <div id="act-suggestions" class="hidden absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-44 overflow-y-auto divide-y divide-gray-100"></div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-xs font-semibold text-gray-700">Kode Place ID Google (ChIJ...)</label>
+          <button type="button" onclick="openPlaceFinder()" class="text-xs text-blue-600 font-semibold hover:underline">Cari Kode ChIJ ↗</button>
+        </div>
+        <input type="text" id="act-placeid" required oninput="previewPlaceIdUrl(this.value, 'act-url-preview')" placeholder="Tempel kode ChIJ... di sini" class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-blue-600">
+        <p id="act-url-preview" class="text-[11px] text-gray-400 mt-1 truncate">Otomatis menjadi link review bintang 5 Google.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Nomor WhatsApp Kritik & Saran (Awali 62)</label>
+        <input type="tel" id="act-wa" required placeholder="6281354970822" class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Buat PIN Keamanan (4 Digit)</label>
+        <input type="password" id="act-pin" required maxlength="4" minlength="4" pattern="\d{4}" inputmode="numeric" placeholder="••••" class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm tracking-[0.4em] font-mono outline-none focus:border-blue-600">
+        <p class="text-[11px] text-gray-400 mt-1">Kartu aktif 1 kali. PIN dipakai untuk mengedit data nanti.</p>
+      </div>
+      <button type="submit" id="btn-activate" class="w-full py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold text-sm">Aktifkan Kartu</button>
+    </form>
+  </div>
+
+  <!-- VIEW 2: KONFIRMASI KARTU SUDAH AKTIF -->
+  <div id="view-active-status" class="hidden w-full max-w-sm bg-white p-7 rounded-2xl shadow-sm border border-gray-200">
+    <h1 class="text-2xl font-bold text-gray-900">Kartu Sudah Aktif</h1>
+    <p class="text-sm text-gray-600 mt-2 leading-relaxed">Kartu <strong id="status-code-text" class="text-gray-900">AYBRZY</strong> berhasil diaktifkan dan siap digunakan. Tap NFC atau scan QR pada kartu untuk menguji halaman review.</p>
+    <a id="btn-open-review" href="#" class="inline-block mt-6 px-6 py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold text-sm">Buka Halaman Review</a>
+    <div class="mt-8 pt-5 border-t border-gray-100">
+      <p class="text-xs text-gray-500">Salah isi nama bisnis, kode Place ID, atau nomor WA?</p>
+      <button type="button" onclick="openPinPrompt()" class="mt-2 text-xs font-bold text-blue-700 hover:underline">Edit Info Kartu →</button>
+    </div>
+  </div>
+
+  <!-- VIEW 3: TAMPILAN PELANGGAN (1-3 KE WA, 4-5 KE GOOGLE REVIEW) -->
+  <div id="view-customer" class="hidden w-full max-w-sm bg-white rounded-3xl shadow-sm overflow-hidden border border-gray-200">
+    <div class="h-1.5 w-full google-bar"></div>
+    <div class="p-6 text-center">
+      <div class="w-11 h-11 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 font-extrabold text-xl">G</div>
+      <h1 id="cust-store-name" class="text-lg font-extrabold text-gray-900 leading-snug">Nama Bisnis</h1>
+      <p class="text-xs text-gray-500 mt-1">Bagaimana pengalaman pelayanan kami?</p>
+      <div class="flex justify-center gap-2 my-5">
+        <button type="button" onclick="handleRating(1)" class="star-btn text-gray-300" data-star="1"><svg class="w-11 h-11 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+        <button type="button" onclick="handleRating(2)" class="star-btn text-gray-300" data-star="2"><svg class="w-11 h-11 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+        <button type="button" onclick="handleRating(3)" class="star-btn text-gray-300" data-star="3"><svg class="w-11 h-11 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+        <button type="button" onclick="handleRating(4)" class="star-btn text-gray-300" data-star="4"><svg class="w-11 h-11 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+        <button type="button" onclick="handleRating(5)" class="star-btn text-gray-300" data-star="5"><svg class="w-11 h-11 fill-current" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+      </div>
+      <p id="rating-label" class="text-xs font-semibold text-gray-400 h-4">Ketuk bintang di atas</p>
+
+      <!-- BINTANG 1-3: KE WHATSAPP -->
+      <div id="panel-low" class="hidden mt-4 pt-4 border-t border-gray-100 text-left space-y-3">
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">Mohon maaf atas ketidaknyamanan Anda. Sampaikan kritik & saran langsung ke WhatsApp kami agar segera diperbaiki.</div>
+        <textarea id="wa-feedback" rows="3" placeholder="Tulis kritik atau masukan Anda di sini..." class="w-full rounded-xl border border-gray-300 p-3 text-sm focus:border-green-600 outline-none resize-none"></textarea>
+        <button type="button" onclick="sendToWhatsApp()" class="w-full py-3.5 rounded-xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm shadow-md">Kirim Kritik ke WhatsApp</button>
+      </div>
+
+      <!-- BINTANG 4-5: LANGSUNG KE GOOGLE REVIEW -->
+      <div id="panel-high" class="hidden mt-4 pt-4 border-t border-gray-100 space-y-3">
+        <div class="inline-flex items-center gap-2 text-blue-700 font-semibold text-sm">
+          <div class="w-4 h-4 border-2 border-blue-700 border-t-transparent rounded-full animate-spin"></div>
+          <span>Membuka Google Review...</span>
+        </div>
+        <a id="fallback-google-btn" href="#" class="block w-full py-3 rounded-xl bg-blue-700 text-white font-semibold text-sm">Lanjut ke Google Review</a>
+      </div>
+    </div>
+    <div class="bg-gray-50 px-5 py-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400">
+      <span id="cust-code-badge" class="font-mono">KODE: -</span>
+      <button type="button" onclick="openPinPrompt()" class="text-gray-500 hover:text-blue-700 font-semibold">Edit Info Kartu (PIN)</button>
+    </div>
+  </div>
+
+  <!-- VIEW 4: EDIT INFO KARTU -->
+  <div id="view-edit" class="hidden w-full max-w-sm bg-white p-7 rounded-2xl shadow-sm border border-gray-200">
+    <div class="flex items-center justify-between mb-1">
+      <h1 class="text-xl font-bold text-gray-900">Edit Info Kartu</h1>
+      <button type="button" onclick="cancelEdit()" class="text-xs text-gray-500 hover:text-gray-800">Batal</button>
+    </div>
+    <p class="text-xs text-gray-500 mb-5">Perbarui nama bisnis, kode Place ID, nomor WA, atau PIN.</p>
+    <form onsubmit="handleUpdate(event)" class="space-y-4">
+      <div class="relative">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Nama Bisnis / Toko</label>
+        <input type="text" id="edit-name" required autocomplete="off" oninput="searchPlaces(this.value, 'edit')" class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600">
+        <div id="edit-suggestions" class="hidden absolute left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 max-h-44 overflow-y-auto divide-y divide-gray-100"></div>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-xs font-semibold text-gray-700">Kode Place ID Google (ChIJ...)</label>
+          <button type="button" onclick="openPlaceFinder()" class="text-xs text-blue-600 font-semibold hover:underline">Cari Kode ChIJ ↗</button>
+        </div>
+        <input type="text" id="edit-placeid" required oninput="previewPlaceIdUrl(this.value, 'edit-url-preview')" class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-xs font-mono outline-none focus:border-blue-600">
+        <p id="edit-url-preview" class="text-[11px] text-gray-400 mt-1 truncate"></p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Nomor WhatsApp Kritik (Awali 62)</label>
+        <input type="tel" id="edit-wa" required class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm outline-none focus:border-blue-600">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-1">PIN (4 Digit)</label>
+        <input type="text" id="edit-pin" required maxlength="4" minlength="4" pattern="\d{4}" inputmode="numeric" class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm font-mono tracking-[0.4em] outline-none focus:border-blue-600">
+      </div>
+      <button type="submit" class="w-full py-3 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-semibold text-sm">Simpan Perubahan</button>
+    </form>
+  </div>
+
+  <!-- VIEW 5: ADMIN GENERATOR KODE & QR (?admin=1) -->
+  <div id="view-admin" class="hidden w-full max-w-sm bg-white p-7 rounded-2xl shadow-sm border border-gray-200">
+    <h1 class="text-xl font-bold text-gray-900">Buat Kode Kartu Baru</h1>
+    <p class="text-xs text-gray-500 mt-1 mb-4">Cetak QR ke stiker atau tulis URL ke chip NFC NTAG213.</p>
+    <div class="flex gap-2 mb-4">
+      <input type="text" id="admin-code" class="flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm font-mono font-bold uppercase">
+      <button type="button" onclick="randomAdminCode()" class="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-xs font-semibold">Acak</button>
+    </div>
+    <div class="border border-dashed border-gray-300 rounded-xl p-4 flex flex-col items-center bg-gray-50">
+      <div id="qrcode-box" class="bg-white p-2.5 rounded-lg"></div>
+      <p id="admin-url-text" class="text-[10px] font-mono text-gray-500 break-all text-center mt-2"></p>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mt-4">
+      <button type="button" onclick="downloadQR()" class="py-2.5 rounded-xl bg-gray-900 text-white text-xs font-semibold">Unduh QR</button>
+      <a id="admin-test-link" href="#" class="py-2.5 rounded-xl bg-blue-700 text-white text-xs font-semibold text-center">Buka Kartu Ini</a>
+    </div>
+  </div>
+
+  <!-- MODAL PIN -->
+  <div id="modal-pin" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-2xl max-w-xs w-full p-6 shadow-xl">
+      <h3 class="text-base font-bold text-gray-900">Masukkan PIN Kartu</h3>
+      <p class="text-xs text-gray-500 mt-1 mb-4">Masukkan 4 digit PIN yang dibuat saat aktivasi.</p>
+      <input type="password" id="pin-check-input" maxlength="4" inputmode="numeric" placeholder="••••" class="w-full rounded-xl border border-gray-300 py-2.5 text-center text-lg font-mono tracking-[0.5em] outline-none focus:border-blue-600">
+      <p id="pin-err" class="hidden text-xs text-red-600 font-medium mt-2">PIN salah, coba lagi.</p>
+      <div class="flex gap-2 mt-4">
+        <button type="button" onclick="closePinPrompt()" class="flex-1 py-2.5 rounded-xl bg-gray-100 text-xs font-semibold text-gray-700">Batal</button>
+        <button type="button" onclick="submitPinCheck()" class="flex-1 py-2.5 rounded-xl bg-blue-700 text-xs font-semibold text-white">Lanjut</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const FIREBASE_DB_URL = "https://kartu-review-80ca9-default-rtdb.asia-southeast1.firebasedatabase.app";
+
+    const params = new URLSearchParams(window.location.search);
+    const isAdmin = params.get('admin') === '1';
+    const isStatusPage = params.get('status') === '1';
+    const cardCode = (params.get('id') || 'AYBRZY').toUpperCase();
+    let cardData = null, selectedStars = 0, redirectTimer = null, searchTimer = null;
+
+    function showView(id) {
+      ['view-activate', 'view-active-status', 'view-customer', 'view-edit', 'view-admin'].forEach(v => {
+        document.getElementById(v).classList.toggle('hidden', v !== id);
+      });
+    }
+
+    function buildReviewUrlFromInput(raw) {
+      const val = raw.trim();
+      const m = val.match(/(ChIJ[a-zA-Z0-9_-]+)/);
+      if (m) return { placeId: m[1], reviewUrl: `https://search.google.com/local/writereview?placeid=${m[1]}` };
+      if (/^https?:\/\//i.test(val)) return { placeId: val, reviewUrl: val };
+      return { placeId: val, reviewUrl: `https://search.google.com/local/writereview?placeid=${encodeURIComponent(val)}` };
+    }
+
+    function previewPlaceIdUrl(val, targetId) {
+      const el = document.getElementById(targetId);
+      el.textContent = val.trim() ? "Target: " + buildReviewUrlFromInput(val).reviewUrl : "Otomatis menjadi link review bintang 5 Google.";
+    }
+
+    function formatWaNumber(raw) {
+      let d = raw.replace(/\D/g, '');
+      return d.startsWith('0') ? '62' + d.slice(1) : d;
+    }
+
+    async function fetchCard(code) {
+      if (FIREBASE_DB_URL) {
+        try { const r = await fetch(`${FIREBASE_DB_URL}/cards/${code}.json`); return await r.json(); } catch (e) {}
+      }
+      const local = localStorage.getItem('smart_gate_card_' + code);
+      return local ? JSON.parse(local) : null;
+    }
+
+    async function storeCard(code, data) {
+      if (FIREBASE_DB_URL) {
+        await fetch(`${FIREBASE_DB_URL}/cards/${code}.json`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+        });
+      }
+      localStorage.setItem('smart_gate_card_' + code, JSON.stringify(data));
+    }
+
+    async function init() {
+      if (isAdmin) { showView('view-admin'); randomAdminCode(); return; }
+      document.getElementById('act-code-label').textContent = cardCode;
+      document.getElementById('status-code-text').textContent = cardCode;
+      document.getElementById('cust-code-badge').textContent = 'KODE: ' + cardCode;
+
+      const data = await fetchCard(cardCode);
+      if (!data || !data.activated) { showView('view-activate'); return; }
+      cardData = data;
+      setupCustomerView(data);
+      showView(isStatusPage ? 'view-active-status' : 'view-customer');
+    }
+
+    function setupCustomerView(data) {
+      document.getElementById('cust-store-name').textContent = data.name;
+      document.getElementById('btn-open-review').href = `?id=${encodeURIComponent(cardCode)}`;
+      document.getElementById('fallback-google-btn').href = data.reviewUrl;
+    }
+
+    async function handleActivate(e) {
+      e.preventDefault();
+      const check = await fetchCard(cardCode);
+      if (check && check.activated) { cardData = check; setupCustomerView(check); showView('view-active-status'); return; }
+      const pin = document.getElementById('act-pin').value.trim();
+      if (!/^\d{4}$/.test(pin)) return;
+
+      const btn = document.getElementById('btn-activate');
+      btn.disabled = true; btn.textContent = "Mengaktifkan...";
+      const built = buildReviewUrlFromInput(document.getElementById('act-placeid').value);
+      const payload = {
+        activated: true, code: cardCode, name: document.getElementById('act-name').value.trim(),
+        placeId: built.placeId, reviewUrl: built.reviewUrl, wa: formatWaNumber(document.getElementById('act-wa').value), pin
+      };
+      await storeCard(cardCode, payload);
+      cardData = payload;
+      setupCustomerView(payload);
+      window.history.replaceState({}, '', `${window.location.pathname}?id=${encodeURIComponent(cardCode)}&status=1`);
+      showView('view-active-status');
+    }
+
+    function handleRating(stars) {
+      selectedStars = stars;
+      if (redirectTimer) clearTimeout(redirectTimer);
+      document.querySelectorAll('.star-btn').forEach(b => {
+        const v = parseInt(b.dataset.star);
+        b.classList.toggle('text-yellow-400', v <= stars);
+        b.classList.toggle('text-gray-300', v > stars);
+      });
+      const label = document.getElementById('rating-label');
+      if (stars <= 3) {
+        label.textContent = `${stars}/5 — Sampaikan Kritik & Saran`;
+        label.className = "text-xs font-bold text-amber-600 h-4";
+        document.getElementById('panel-low').classList.remove('hidden');
+        document.getElementById('panel-high').classList.add('hidden');
+      } else {
+        label.textContent = `${stars}/5 — Terima Kasih!`;
+        label.className = "text-xs font-bold text-emerald-600 h-4";
+        document.getElementById('panel-low').classList.add('hidden');
+        document.getElementById('panel-high').classList.remove('hidden');
+        redirectTimer = setTimeout(() => { window.location.href = cardData.reviewUrl; }, 650);
+      }
+    }
+
+    function sendToWhatsApp() {
+      if (!cardData) return;
+      const fb = document.getElementById('wa-feedback').value.trim() || "(Tidak ada pesan tambahan)";
+      const text = `Halo admin *${cardData.name}*,\nSaya memberikan penilaian *${selectedStars}/5 Bintang*.\n\nKritik & Saran:\n"${fb}"\n\nTerima kasih.`;
+      window.open(`https://wa.me/${cardData.wa}?text=${encodeURIComponent(text)}`, '_blank');
+    }
+
+    function openPinPrompt() {
+      if (redirectTimer) clearTimeout(redirectTimer);
+      document.getElementById('pin-check-input').value = '';
+      document.getElementById('pin-err').classList.add('hidden');
+      document.getElementById('modal-pin').classList.remove('hidden');
+      setTimeout(() => document.getElementById('pin-check-input').focus(), 100);
+    }
+
+    function closePinPrompt() { document.getElementById('modal-pin').classList.add('hidden'); }
+
+    function submitPinCheck() {
+      if (cardData && document.getElementById('pin-check-input').value.trim() === cardData.pin) {
+        closePinPrompt();
+        document.getElementById('edit-name').value = cardData.name;
+        document.getElementById('edit-placeid').value = cardData.placeId || cardData.reviewUrl;
+        document.getElementById('edit-wa').value = cardData.wa;
+        document.getElementById('edit-pin').value = cardData.pin;
+        previewPlaceIdUrl(document.getElementById('edit-placeid').value, 'edit-url-preview');
+        showView('view-edit');
+      } else {
+        document.getElementById('pin-err').classList.remove('hidden');
+      }
+    }
+
+    async function handleUpdate(e) {
+      e.preventDefault();
+      const built = buildReviewUrlFromInput(document.getElementById('edit-placeid').value);
+      const updated = {
+        ...cardData, name: document.getElementById('edit-name').value.trim(),
+        placeId: built.placeId, reviewUrl: built.reviewUrl,
+        wa: formatWaNumber(document.getElementById('edit-wa').value), pin: document.getElementById('edit-pin').value.trim()
+      };
+      await storeCard(cardCode, updated);
+      cardData = updated;
+      setupCustomerView(updated);
+      showView('view-customer');
+    }
+
+    function cancelEdit() { showView(isStatusPage ? 'view-active-status' : 'view-customer'); }
+
+    function searchPlaces(q, mode) {
+      clearTimeout(searchTimer);
+      const box = document.getElementById(mode + '-suggestions');
+      if (q.trim().length < 3) { box.classList.add('hidden'); return; }
+      searchTimer = setTimeout(async () => {
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=id&limit=5&q=${encodeURIComponent(q)}`, { headers: { 'Accept-Language': 'id' } });
+          const list = await res.json();
+          if (!list.length) { box.classList.add('hidden'); return; }
+          box.innerHTML = list.map(i => {
+            const lbl = i.display_name.split(',').slice(0, 4).join(',');
+            return `<button type="button" onclick="pickPlace('${mode}', '${lbl.replace(/'/g, "\\'")}')" class="w-full text-left px-3.5 py-2 text-xs hover:bg-blue-50">${lbl}</button>`;
+          }).join('');
+          box.classList.remove('hidden');
+        } catch (e) { box.classList.add('hidden'); }
+      }, 350);
+    }
+
+    function pickPlace(mode, lbl) {
+      document.getElementById(mode + '-name').value = lbl;
+      document.getElementById(mode + '-suggestions').classList.add('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#act-name') && !e.target.closest('#act-suggestions')) document.getElementById('act-suggestions')?.classList.add('hidden');
+      if (!e.target.closest('#edit-name') && !e.target.closest('#edit-suggestions')) document.getElementById('edit-suggestions')?.classList.add('hidden');
+    });
+
+    function openPlaceFinder() { window.open('https://developers.google.com/maps/documentation/javascript/examples/places-placeid-finder', '_blank'); }
+
+    function randomAdminCode() {
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let c = '';
+      for (let i = 0; i < 6; i++) c += chars.charAt(Math.floor(Math.random() * chars.length));
+      document.getElementById('admin-code').value = c;
+      renderAdminQR();
+    }
+
+    function renderAdminQR() {
+      const c = document.getElementById('admin-code').value.trim().toUpperCase();
+      const full = `${window.location.href.split('?')[0]}?id=${encodeURIComponent(c)}`;
+      document.getElementById('admin-url-text').textContent = full;
+      document.getElementById('admin-test-link').href = `?id=${encodeURIComponent(c)}`;
+      const box = document.getElementById('qrcode-box');
+      box.innerHTML = '';
+      new QRCode(box, { text: full, width: 140, height: 140 });
+    }
+
+    document.getElementById('admin-code')?.addEventListener('input', renderAdminQR);
+
+    function downloadQR() {
+      const c = document.getElementById('admin-code').value.trim().toUpperCase();
+      const img = document.querySelector('#qrcode-box img') || document.querySelector('#qrcode-box canvas');
+      if (!img) return;
+      const a = document.createElement('a');
+      a.download = `QR-${c}.png`; a.href = img.src || img.toDataURL('image/png'); a.click();
+    }
+
+    init();
+  </script>
+</body>
+</html>
